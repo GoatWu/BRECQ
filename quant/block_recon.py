@@ -64,6 +64,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
             if isinstance(module, QuantModule):
                 if module.act_quantizer.delta is not None:
                     opt_params += [module.act_quantizer.delta]
+        print(opt_params)
         optimizer = torch.optim.Adam(opt_params, lr=lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=iters, eta_min=0.)
 
@@ -90,7 +91,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
         out_quant = block(cur_inp)
 
         err = loss_func(out_quant, cur_out, cur_grad)
-        err.backward(retain_graph=True)
+        err.backward()
         if multi_gpu:
             for p in opt_params:
                 link.allreduce(p.grad)
@@ -108,6 +109,9 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
     # Reset original activation function
     if not include_act_func:
         block.activation_function = org_act_func
+        
+    if act_quant:
+        print(opt_params)
 
 
 class LossFunction:
@@ -154,6 +158,10 @@ class LossFunction:
             grad = grad.abs()
             batch_dotprod = torch.sum(a * grad, (1, 2, 3)).view(-1, 1, 1, 1)
             rec_loss = (batch_dotprod * a * grad).mean() / 100
+        elif self.rec_loss == 'hessian':
+            rec_loss = ((pred - tgt).pow(2) * grad.abs()).sum(1).mean()
+        elif self.rec_loss == 'jacobian':
+            rec_loss = ((pred - tgt).abs() * grad.abs()).sum(1).mean()
         else:
             raise ValueError('Not supported reconstruction loss function: {}'.format(self.rec_loss))
 

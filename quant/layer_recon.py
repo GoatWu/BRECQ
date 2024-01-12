@@ -142,6 +142,10 @@ class LossFunction:
             grad = grad.abs()
             batch_dotprod = torch.sum(a * grad, (1, 2, 3)).view(-1, 1, 1, 1)
             rec_loss = (batch_dotprod * a * grad).mean() / 100
+        elif self.rec_loss == 'hessian':
+            rec_loss = ((pred - tgt).pow(2) * grad.abs()).sum(1).mean()
+        elif self.rec_loss == 'jacobian':
+            rec_loss = ((pred - tgt).abs() * grad.abs()).sum(1).mean()
         else:
             raise ValueError('Not supported reconstruction loss function: {}'.format(self.rec_loss))
 

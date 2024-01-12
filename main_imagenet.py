@@ -140,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--arch', default='resnet18', type=str, help='dataset name',
                         choices=['resnet18', 'resnet50', 'mobilenetv2', 'regnetx_600m', 'regnetx_3200m', 'mnasnet'])
     parser.add_argument('--batch_size', default=64, type=int, help='mini-batch size for data loader')
-    parser.add_argument('--workers', default=4, type=int, help='number of workers for data loader')
+    parser.add_argument('--workers', default=12, type=int, help='number of workers for data loader')
     parser.add_argument('--data_path', default='', type=str, help='path to ImageNet data', required=True)
 
     # quantization parameters
@@ -199,7 +199,11 @@ if __name__ == '__main__':
 
     # Kwargs for weight rounding calibration
     kwargs = dict(cali_data=cali_data, iters=args.iters_w, weight=args.weight, asym=True,
-                  b_range=(args.b_start, args.b_end), warmup=args.warmup, act_quant=False, opt_mode='mse')
+                  b_range=(args.b_start, args.b_end), warmup=args.warmup, act_quant=False, 
+                  # opt_mode='mse',
+                  # opt_mode='hessian',
+                  opt_mode='jacobian',
+                 )
 
     def recon_model(model: nn.Module):
         """
@@ -237,7 +241,18 @@ if __name__ == '__main__':
         # does not get involved in further computation
         qnn.disable_network_output_quantization()
         # Kwargs for activation rounding calibration
-        kwargs = dict(cali_data=cali_data, iters=args.iters_a, act_quant=True, opt_mode='mse', lr=args.lr, p=args.p)
+        kwargs = dict(cali_data=cali_data, iters=args.iters_a, act_quant=True, 
+                      opt_mode='mse', lr=args.lr, p=args.p)
+        recon_model(qnn)
+        qnn.set_quant_state(weight_quant=True, act_quant=True)
+        print('Full quantization (W{}A{}) accuracy: {}'.format(args.n_bits_w, args.n_bits_a,
+                                                               validate_model(test_loader, qnn)))
+        
+        kwargs = dict(cali_data=cali_data, iters=args.iters_a, act_quant=True, asym=True,
+                      # opt_mode='mse', 
+                      # opt_mode='hessian',
+                      opt_mode='jacobian',
+                      lr=args.lr, p=args.p)
         recon_model(qnn)
         qnn.set_quant_state(weight_quant=True, act_quant=True)
         print('Full quantization (W{}A{}) accuracy: {}'.format(args.n_bits_w, args.n_bits_a,
